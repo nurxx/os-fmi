@@ -1,0 +1,40 @@
+1.echo "$(cat text.txt)" > original.txt
+- Копиране на оригиналното съдържание на text.txt в нов временен файл
+
+2.echo "$(cat text.txt | tr -d [:punct:] | tr [:upper:] [:lower:] | sed 's/ /\n/g' | sort -u)" > text.txt
+- Извършване на  промени по text.txt:
+	2.1 Премахване на всички пунктацонни знаци с командата  tr -d [:punct:] от изхода му от командата cat
+ 	2.2 Заменяне на всички големи букви със съответните малки чрез командата tr [:upper:] [:lower:] от изхода на 2.1
+	2.3 Заменяне на всички space-ове с нов ред чрез командата sed 's/ /\n/g' от изхода на 2.2
+	2.4 Сортиране изхода на 2.3 , премахване на всички повтарящи се думи чрез sort -u
+	2.5 Презаписване на text.txt с новото му съдържание (общия резултат от цялата поредица от команди подадени на echo) 
+3.echo "$(agrep -v -w -f dic.txt text.txt)" > text.txt
+- Намиране на всички думи, които се срещат в text.txt, но не и в dic.txt, чрез agrep -v -w -f dic.txt text.txt и презаписване text.txt с изхода на командата
+	3.1 -v - намира думите, които не се срещат в речника
+	3.2 -w - взима цялостна дума от всеки ред
+	3.3 -f - търси всяка дума - pattern от първия файл в другия, като изходът е редовете които match-ват 
+
+# Начин на сдобиване с agrep:
+sudo apt-get install agrep
+
+4. Командата tre-agrep --best-match -s -w "string" dic.txt:
+	4.1 --best-match - връща списък от думи от dic.txt, които са най-близки до "string"
+	4.2 -s - намира Levenschtein(Edit) distance между думите
+	4.3 -w - взима цялостна дума от всеки ред 
+
+# Начин на сдобиване с tre-agrep: 
+sudo apt-get install tre-agrep
+
+5.
+	while read word; do
+		echo "$word:$(tre-agrep --best-match -s -w $word dic.txt| head -n 1)"
+	done < text.txt
+- Обхождане на всяка дума от text.txt с цикъла while и прилагам 4. за нея и изписване резултата с echo
+
+6.echo "$(cat original.txt)" > text.txt
+- Връщане на старото съдържание на text.txt, което е запазено в original.txt
+
+7.rm original.txt
+- Изтриване на създадения файл, понеже вече не е нужен 
+
+
