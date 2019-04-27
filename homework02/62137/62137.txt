@@ -1,0 +1,149 @@
+#!/bin/bash
+
+# Проверка за броят аргументи подадени на скрипта
+if [[ $# -ne 4 ]]
+then
+	echo "Not enough arguments passed to the script!"
+	exit 1
+fi
+
+# Присвояване на отделни променливи всеки един аргумент на скрипта
+LOG_FILE=$1
+EEG_FILE=$2
+WAV_FILE=$3
+OUTPUT_DIR=$4
+
+# Извеждане на грешка, ако някой от аргументите не от коректния тип
+if [[ ${LOG_FILE: -4} != ".log" || ${EEG_FILE: -4} != ".xml" || ${WAV_FILE: -4} != ".wav" ]]
+then
+	echo "Incorrect file type!"
+	exit 1
+fi
+
+# Създаване на временен файл, който ще съдържа редовете с таг tick от xml файла
+# При присвояване на таговете на променлива, получих грешка от типа : Arguments list too long, затова използвам временен файл
+echo "$(cat $EEG_FILE | egrep "tick")" > ticks 
+
+# Извеждане на грешка, ако се повтарят стимули
+duplicates=$(sort $LOG_FILE| uniq --count --repeated | wc -l)
+if [[ $duplicates -ne 0 ]]
+then
+	echo "$LOG_FILE contains duplicate stimuls!"
+	exit 1
+fi
+
+echo $EEG_TZ
+
+# Създаване на директорията, в която ще се запази резултатът от изпълнението на скрипта
+mkdir -p $OUTPUT_DIR 
+
+# Променлива, която съдържа стойността на SamplingRate
+rate=$(cat $EEG_FILE | egrep "SamplingRate" | tr -d "a-zA-Z></")
+
+# Променлива, която съдържа датата на експеримента във формат yyyy-mm-dd
+start_recording_date=$(cat $EEG_FILE | egrep "StartRecordingDate" | tr -d "a-zA-Z></" | awk -F"." '{print $3,$2,$1}' | tr " " "-")
+echo $start_recording_date
+
+# Променлива, която съдържа началното време на експеримента 
+start_recording_time=$(cat $EEG_FILE | egrep "StartRecordingTime" | tr -d "a-zA-Z></")
+echo $start_recording_time
+
+# Изчисляване на времетраенето на експеримента в секунди и запазване на стойността в променлива
+duration=$(cat $EEG_FILE | egrep "RecordLength" | tr -d "a-zA-Z></" | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
+
+# Проверка за environment променливата EEG_TZ и изчисляване на Unix Epoch time според времевата зона
+if [[ $EEG_TZ != " " ]]
+then
+	eeg_start=$(TZ=":$EEG_TZ" date --date="$start_recording_date $start_recording_time" "+%s")
+	echo $eeg_start
+else
+	eeg_start=$(TZ="UTC" date --date="$start_recording_date $start_recording_time" "+%s")
+	echo $eeg_start
+fi
+
+# Изчисляване на края на експеримента в Unix Epoch time
+eeg_end=$(($eeg_start + $duration))
+
+# Променлива за минимум време на продължителност на всеки един wav файл за даден стимул
+min=0.2
+
+# Променлива за номера на реда, от който започваме да режем временния файл ticks
+from_line=1
+
+# Променлива за номера на реда, до който сме изрязали от ticks
+current_index=0
+# ||  $(echo "$stimul_end > $eeg_end" | bc) -eq 1 || $(echo "$stimul_start < $eeg_start" | bc) -eq 1 
+
+# Обхождане на log файла
+while read p
+do
+	# Променлива за името на стимула
+	stimul=$(echo ${p} | awk '{print $1}')
+
+	# Създаване на променлива за начало на записа, инициализиране с края на стимула beep
+	if [ "$stimul" = "beep" ]
+	then
+		wav_start=$(echo ${p} | awk '{print $3}')
+	fi
+
+	# Променлива за начало за всеки стимул
+	stimul_start=$(echo ${p} | awk '{print $2}')
+
+	# Променлива за край на всеки стимул
+	stimul_end=$(echo ${p} | awk '{print $3}')
+
+	# Променлива за времетраенето на всеки стимул
+	stimul_duration=$(echo ${p} |awk '{print $3-$2}')
+
+	# Проверка за продължителността на стимула дали е по-малка от минимума
+	if [ $(echo "$stimul_duration < $min" | bc) -eq 1 ]
+	then
+		echo "$stimul less than $min sec was skipped!"
+
+	# Проверка, ако даден стимул е извън времето на протичане на експеримента 
+	elif [[ $(echo "$stimul_start > $eeg_end" | bc) -eq 1 || $(echo "$stimul_end > $eeg_end" | bc) -eq 1 ]]
+	then 
+		echo "$stimul out of time range was skipped!"
+
+	# Приемаме, че стимулите, започват след beep - по условие записът започва след beep,
+	# следователно beep.xml и beep.wav не се съдържат в резултатната директория 
+	elif [ "$stimul" != "beep" ]
+	then
+		# Броят редове, които трябва да изрежем от ticks за съответния стимул 
+		to_line=$(echo $rate*$stimul_duration | bc)
+
+		# Закръгляне до цяло число
+		to_line=${to_line%.*} 
+
+		# Модифициране на променливата с номера на реда, до който трябва да изрежем
+		to_line=$(($to_line + $current_index))
+
+		# Модифициране до кой ред сме прочели/изрязали от ticks
+		current_index=$to_line 
+
+		# Изрязване на съответните редове за всеки стимул и запазване в отделен xml файл 
+		# с име името на стимула в подадената директория
+		sed -n "$from_line, $to_line p" ticks > $OUTPUT_DIR/$stimul.xml
+
+		# Модифициране на номера на началния ред за изрязване за следващ стимул
+		from_line=$(($to_line + 1)) 
+
+		# Променлива за начало на всеки един аудио файл за съответния стимул
+		stimul_record_start=$(echo $stimul_start $wav_start | awk '{print $1-$2}')
+
+		# Изрязване на съответното време на стимула от wav файла 
+		# и запазване в отделен wav файл за съответния стимул в подадената директория 
+		sox $WAV_FILE $OUTPUT_DIR/$stimul.wav trim $stimul_record_start $stimul_duration
+	fi
+done <$LOG_FILE
+
+# Изтриване на временния файл
+rm ticks
+
+# Начин на инсталиране на sox:
+sudo apt install sox 
+
+# Примерно извикване на скрипта:
+$ export EEG_TZ='Europe/Sofia'
+$ ./62137.sh timetable.log eeg.xml larynx.wav ~/output_dir
+
