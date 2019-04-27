@@ -1,1 +1,1 @@
-# os-fmi
+# Learning repo for Operating Systems course
