@@ -10,7 +10,7 @@
 Примерен изход:
 260415
 
- ` find $ROOT -user $USER | wc -l `
+-  ` find $ROOT -user $USER | wc -l `
 
 -- SI-2017-z2
 
