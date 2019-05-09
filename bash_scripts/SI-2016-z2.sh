@@ -7,7 +7,7 @@ if [[ $# -ne 1 ]]; then
 	exit 1
 else
 	max_rss=$1
-	if [[ $(whoami) = "ilknur" ]]; then
+	if [[ $(whoami) = "root" ]]; then
 		users=$(ps -e -o uid,pid,rss | sed '1d' | awk '{print $1}' | sort -nk1 | uniq)
 		users=(${users})
 		for user in "${users[@]}"; do
