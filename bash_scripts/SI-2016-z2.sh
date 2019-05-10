@@ -8,11 +8,12 @@ if [[ $# -ne 1 ]]; then
 else
 	max_rss=$1
 	if [[ $(whoami) = "root" ]]; then
-		users=$(ps -e -o uid,pid,rss | sed '1d' | awk '{print $1}' | sort -nk1 | uniq)
+		ps -e -o uid,pid,rss >ps
+		users=$(cat ps | sed '1d' | awk '{print $1}' | sort -nk1 | uniq)
 		users=(${users})
 		for user in "${users[@]}"; do
 			echo "User id : $user"
-			processes=$(ps -e -o uid,pid,rss | egrep "^.*$user" | sort -nr -k3)
+			processes=$(cat ps| awk -v user="$user" '$1==user' | sort -nr -k3)
 			processes=(${processes})
 			echo ${processes[0]} 
 			max_pid=$(echo ${processes[0]} | awk '{print $2}')
@@ -25,7 +26,7 @@ else
 			echo "Total rss for $user -> ${total_rss}"
 			if [[ $total_rss -gt $max_rss ]]; then
 				echo "Signaling to stop process with PID: ${max_pid}" 
-				# kill -SIGSTOP $max_pid 
+				# kill -SIGSTOP $max_pid - stop process with max rss by pid
 			fi
 		done
 	fi
