@@ -2,7 +2,7 @@
 
 IFS='
 '
-if [[ $(whoami) != "ilknur" ]]; then
+if [[ $(whoami) != "root" ]]; then
 	echo "User must be root!"
 	exit 1
 fi 
