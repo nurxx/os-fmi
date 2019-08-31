@@ -8,7 +8,6 @@
 #include <unistd.h>
 int main(){
 	int fd[2];
-
 	pipe(fd);
 
 	pid_t ls_pid;
