@@ -1,48 +1,37 @@
 /* реализация на конвейера "ls | wc -l" */
-
+#include <stdint.h>
+#include <stdio.h>
 #include <sys/types.h>
-#define READ 0
-#define WRITE 1
-main (void)
-{
-	int pd[2], status;
-	pid_t pid;
-	pipe(pd);
-	pid = fork( );
-	if ( pid == 0 ) {
-	/* in first child */
-		close(1);
-		dup(pd[WRITE]);
-		close(pd[READ]);
-		close(pd[WRITE]);
-		execlp("ls", "ls", 0);
-		perror("Cannot exec ls" );
-		exit(1);
-		}
-	/* in parent */
-	if ( pid == -1 ) {
-		perror("Cannot fork first child");
-		exit(1);
+#include <err.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+int main(){
+	int fd[2];
+
+	pipe(fd);
+
+	pid_t ls_pid;
+	if ((ls_pid = fork()) == -1){
+		errx(1,"fork ls");
 	}
-	pid = fork();
-	if ( pid == 0 ) {
-	/* in second child */
-		close(0);
-		dup(pd[READ]);
-		close(pd[READ]) ;
-		close(pd[WRITE]) ;
-		execlp("wc", "wc", "-l", 0);
-		perror("Cannot exec wc");
-		exit(1);
-	}
-	/* in parent */
-		close(pd[READ]) ;
-		close(pd[WRITE]);
-		if ( pid == -1 ) {
-		perror("Cannot f ork second child");
-		exit(1); }
+
+	if(ls_pid == 0){
+		close(fd[0]);
+		if(dup2(fd[1],1) == -1){
+			err(1,"dup2 ls");
 		}
-		waitpid(pid, &s tatus, 0);
-		printf("Parent after end o f pipe: status=%d\n", status);
-		exit(0);
+		if(execlp("ls","ls",NULL) == -1){
+			err(1,"exec ls");
+		}
+	}
+	close(fd[1]);
+	if(dup2(fd[0],0) == -1){
+		err(1,"dup2 ls -> wc");
+	}
+
+	if(execlp("wc","wc","-l",NULL) == -1){
+		err(1,"exec wc");
+	}
+	exit(EXIT_SUCCESS);
 }
